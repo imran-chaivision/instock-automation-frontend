@@ -1,0 +1,1 @@
+# instock-automation-frontend
