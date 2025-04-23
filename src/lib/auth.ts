@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 const TOKEN_EXPIRY = 30 * 60 * 1000 // 30 minutes in milliseconds
 const TOKEN_REFRESH_INTERVAL = 25 * 60 * 1000 // 25 minutes in milliseconds
+const API_BASE_URL = "https://instock-automation-backend-94581437211.us-central1.run.app/api/v1"
 
 interface AuthState {
     accessToken: string | null
@@ -37,7 +38,7 @@ export const useAuth = () => {
         }
 
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/login`, {
+            const response = await fetch(`${API_BASE_URL}/auth/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -71,7 +72,7 @@ export const useAuth = () => {
 
     const login = async (username: string, password: string) => {
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/login`, {
+            const response = await fetch(`${API_BASE_URL}/auth/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

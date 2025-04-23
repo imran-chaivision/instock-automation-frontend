@@ -7,6 +7,8 @@ import { useToast } from '@/components/ui/toast'
 import { apiFetch } from '@/lib/api'
 import { useEffect, useRef, useState } from 'react'
 
+const API_BASE_URL = "https://instock-automation-backend-94581437211.us-central1.run.app/api/v1"
+
 interface AbortControllerWithInterval extends AbortController {
   interval?: NodeJS.Timeout;
 }
@@ -40,19 +42,8 @@ interface ShipmentDocumentResponse {
   task_id: string
 }
 
-interface ShipmentDocumentStatus {
-  status: 'processing' | 'completed' | 'failed'
-  error?: string
-  result?: {
-    content_type: string
-    content: string
-    filename: string
-  }
-}
-
 export default function Dashboard() {
   const { showToast, ToastContainer } = useToast()
-  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const abortControllerRef = useRef<AbortControllerWithInterval | null>(null)
@@ -62,7 +53,6 @@ export default function Dashboard() {
   const [selectedShipmentId, setSelectedShipmentId] = useState<string>('')
   const [isFetchingShipments, setIsFetchingShipments] = useState(false)
   const [isProcessingDocuments, setIsProcessingDocuments] = useState(false)
-  const [documentTaskId, setDocumentTaskId] = useState<string | null>(null)
   const [documentError, setDocumentError] = useState<string | null>(null)
 
   // Cleanup function to cancel any ongoing requests when component unmounts
@@ -75,8 +65,8 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
-    setIsAnyLoading(isLoading)
-  }, [isLoading])
+    setIsAnyLoading(isFetchingShipments)
+  }, [isFetchingShipments])
 
   const fetchShipments = async () => {
     if (!agendaId) {
@@ -113,7 +103,6 @@ export default function Dashboard() {
 
     setIsProcessingDocuments(true)
     setDocumentError(null)
-    setDocumentTaskId(null)
 
     try {
       const response = await apiFetch(
@@ -124,13 +113,11 @@ export default function Dashboard() {
         }
       ) as ShipmentDocumentResponse
 
-      setDocumentTaskId(response.task_id)
-
       // Start polling for status
       const pollStatus = async () => {
         try {
           const statusResponse = await fetch(
-            `${import.meta.env.VITE_API_BASE_URL}/shipments/shipment-documents/${response.task_id}`,
+            `${API_BASE_URL}/shipments/shipment-documents/${response.task_id}`,
             {
               headers: {
                 'Authorization': `Bearer ${localStorage.getItem('access_token')}`
@@ -163,7 +150,6 @@ export default function Dashboard() {
 
             showToast('Success', 'Shipment documents downloaded successfully', 'success')
             setIsProcessingDocuments(false)
-            setDocumentTaskId(null)
           } else if (statusResponse.status === 202) {
             // Still processing, poll again after 2 seconds
             setTimeout(pollStatus, 2000)
@@ -172,25 +158,21 @@ export default function Dashboard() {
             setDocumentError(errorData.detail || 'Task not found or expired')
             showToast('Error', errorData.detail || 'Task not found or expired', 'error')
             setIsProcessingDocuments(false)
-            setDocumentTaskId(null)
           } else if (statusResponse.status === 500) {
             const errorData = await statusResponse.json()
             setDocumentError(errorData.detail || 'Failed to process shipment documents')
             showToast('Error', errorData.detail || 'Failed to process shipment documents', 'error')
             setIsProcessingDocuments(false)
-            setDocumentTaskId(null)
           } else {
             // Handle unexpected response
             setDocumentError('Unexpected response from server')
             showToast('Error', 'Unexpected response from server', 'error')
             setIsProcessingDocuments(false)
-            setDocumentTaskId(null)
           }
         } catch (err) {
           setDocumentError(err instanceof Error ? err.message : 'Failed to check document status')
           showToast('Error', err instanceof Error ? err.message : 'Failed to check document status', 'error')
           setIsProcessingDocuments(false)
-          setDocumentTaskId(null)
         }
       }
 

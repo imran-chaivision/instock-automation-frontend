@@ -1,5 +1,5 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-const AUTH_STORAGE_KEY = import.meta.env.VITE_AUTH_STORAGE_KEY
+const API_BASE_URL = "https://instock-automation-backend-94581437211.us-central1.run.app/api/v1"
+const AUTH_STORAGE_KEY = "access_token"
 
 export interface ApiOptions extends RequestInit {
     signal?: AbortSignal
@@ -23,7 +23,7 @@ export async function apiFetch(url: string, options: ApiOptions = {}) {
     if (response.status === 401) {
         // Clear auth data
         localStorage.removeItem(AUTH_STORAGE_KEY)
-        localStorage.removeItem(import.meta.env.VITE_USER_STORAGE_KEY)
+        localStorage.removeItem("user_email")
 
         // Redirect to login
         window.location.href = '/sign-in'
