@@ -51,6 +51,8 @@ export default function Dashboard() {
   const [agendaId, setAgendaId] = useState<string>('')
   const [shipments, setShipments] = useState<Shipment[]>([])
   const [selectedShipmentId, setSelectedShipmentId] = useState<string>('')
+  const [csrfToken, setCsrfToken] = useState<string>('')
+  const [rawCookies, setRawCookies] = useState<string>('')
   const [isFetchingShipments, setIsFetchingShipments] = useState(false)
   const [isProcessingDocuments, setIsProcessingDocuments] = useState(false)
   const [documentError, setDocumentError] = useState<string | null>(null)
@@ -96,8 +98,8 @@ export default function Dashboard() {
   }
 
   const handleCreateShipmentDocuments = async () => {
-    if (!agendaId || !selectedShipmentId) {
-      setError('Please select both Agenda ID and Shipment')
+    if (!agendaId || !selectedShipmentId || !csrfToken || !rawCookies) {
+      setError('Please fill in all required fields')
       return
     }
 
@@ -106,7 +108,7 @@ export default function Dashboard() {
 
     try {
       const response = await apiFetch(
-        `/shipments/shipment-documents?agenda_id=${agendaId}&shipment_id=${selectedShipmentId}`,
+        `/shipments/shipment-documents?agenda_id=${agendaId}&shipment_id=${selectedShipmentId}&csrftoken=${csrfToken}&raw_cookies=${encodeURIComponent(rawCookies)}`,
         {
           method: 'POST',
           signal: abortControllerRef.current?.signal
@@ -198,8 +200,6 @@ export default function Dashboard() {
         <LoadingOverlay isVisible={isAnyLoading} />
         <div className='space-y-8'>
 
-
-
           {/* Shipment Documents Section */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold mb-4">Shipment Documents</h2>
@@ -222,26 +222,44 @@ export default function Dashboard() {
               </div>
 
               {shipments.length > 0 && (
-                <div className="flex items-center gap-4">
-                  <select
-                    value={selectedShipmentId}
-                    onChange={(e) => setSelectedShipmentId(e.target.value)}
-                    className="px-3 py-2 border rounded-md"
-                  >
-                    <option value="">Select a Shipment</option>
-                    {shipments.map((shipment) => (
-                      <option key={shipment.ID} value={shipment.ID}>
-                        {shipment.ShipmentName} - {shipment.ShipFromWarehouse} ({shipment.TotalQty} units)
-                      </option>
-                    ))}
-                  </select>
-                  <Button
-                    variant="outline"
-                    onClick={handleCreateShipmentDocuments}
-                    disabled={isProcessingDocuments || !selectedShipmentId}
-                  >
-                    {isProcessingDocuments ? 'Processing...' : 'Download Documents'}
-                  </Button>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <select
+                      value={selectedShipmentId}
+                      onChange={(e) => setSelectedShipmentId(e.target.value)}
+                      className="px-3 py-2 border rounded-md"
+                    >
+                      <option value="">Select a Shipment</option>
+                      {shipments.map((shipment) => (
+                        <option key={shipment.ID} value={shipment.ID}>
+                          {shipment.ShipmentName} - {shipment.ShipFromWarehouse} ({shipment.TotalQty} units)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <input
+                      type="text"
+                      placeholder="Enter CSRF Token"
+                      value={csrfToken}
+                      onChange={(e) => setCsrfToken(e.target.value)}
+                      className="px-3 py-2 border rounded-md"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Enter Raw Cookies"
+                      value={rawCookies}
+                      onChange={(e) => setRawCookies(e.target.value)}
+                      className="px-3 py-2 border rounded-md"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={handleCreateShipmentDocuments}
+                      disabled={isProcessingDocuments || !selectedShipmentId || !csrfToken || !rawCookies}
+                    >
+                      {isProcessingDocuments ? 'Processing...' : 'Download Documents'}
+                    </Button>
+                  </div>
                 </div>
               )}
 
