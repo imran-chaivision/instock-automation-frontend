@@ -56,7 +56,8 @@ export default function Dashboard() {
   const [isFetchingShipments, setIsFetchingShipments] = useState(false)
   const [isProcessingDocuments, setIsProcessingDocuments] = useState(false)
   const [documentError, setDocumentError] = useState<string | null>(null)
-
+  const [logs, setLogs] = useState<string[]>([])
+  const [driveLink, setDriveLink] = useState<string | null>(null)
   // Cleanup function to cancel any ongoing requests when component unmounts
   useEffect(() => {
     return () => {
@@ -117,6 +118,8 @@ export default function Dashboard() {
 
       // Start polling for status
       const pollStatus = async () => {
+        setLogs([])
+        setDriveLink(null)
         try {
           const statusResponse = await fetch(
             `${API_BASE_URL}/shipments/shipment-documents/${response.task_id}`,
@@ -136,6 +139,23 @@ export default function Dashboard() {
             const filename = contentDisposition
               ? contentDisposition.split('filename=')[1].replace(/["']/g, '')
               : `shipment_documents_${selectedShipmentId}.zip`
+
+            // Get logs from the custom header
+            const logsHeader = statusResponse.headers.get('X-Logs')
+            if (logsHeader) {
+              try {
+                const logs = JSON.parse(logsHeader)
+                // You can display logs in a modal or console
+                setLogs(logs)
+              } catch (error) {
+                console.error('Error parsing logs:', error)
+              }
+            }
+
+            const driveLink = statusResponse.headers.get('X-Drive-Link')
+            if (driveLink) {
+              setDriveLink(driveLink)
+            }
 
             // Create a blob from the response
             const blob = await statusResponse.blob()
@@ -266,6 +286,20 @@ export default function Dashboard() {
               {documentError && (
                 <div className="text-sm text-red-500">
                   {documentError}
+                </div>
+              )}
+              {logs.length > 0 && (
+                <div className="text-sm text-red-500">
+                  {logs.map((log, index) => (
+                    <div key={index}>{log}</div>
+                  ))}
+                </div>
+              )}
+              {driveLink && (
+                <div className="text-sm text-green-500">
+                  <a href={driveLink} target="_blank" rel="noopener noreferrer">
+                    View Google Drive Link
+                  </a>
                 </div>
               )}
             </div>
