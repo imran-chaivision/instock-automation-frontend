@@ -55,6 +55,7 @@ export default function Dashboard() {
   const [rawCookies, setRawCookies] = useState<string>('')
   const [isFetchingShipments, setIsFetchingShipments] = useState(false)
   const [isProcessingDocuments, setIsProcessingDocuments] = useState(false)
+  const [isProcessingBoxManifest, setIsProcessingBoxManifest] = useState(false)
   const [documentError, setDocumentError] = useState<string | null>(null)
   const [logs, setLogs] = useState<string[]>([])
   const [driveLink, setDriveLink] = useState<string | null>(null)
@@ -206,6 +207,57 @@ export default function Dashboard() {
     }
   }
 
+  const handleGetBoxManifest = async () => {
+    if (!agendaId || !selectedShipmentId) {
+      setError('Please select an Agenda ID and Shipment')
+      return
+    }
+
+    setIsProcessingBoxManifest(true)
+    setDocumentError(null)
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/shipments/box-manifest?agenda_id=${agendaId}&shipment_id=${selectedShipmentId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          },
+          signal: abortControllerRef.current?.signal
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+
+        // Create a blob from the base64 encoded content
+        const content = data.content
+        const blob = new Blob([content], { type: 'text/csv' })
+
+        // Create a temporary link element and trigger the download
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = data.filename || `box_manifest_${selectedShipmentId}.csv`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+
+        showToast('Success', 'Box manifest downloaded successfully', 'success')
+      } else {
+        const errorData = await response.json()
+        setDocumentError(errorData.detail || 'Failed to get box manifest')
+        showToast('Error', errorData.detail || 'Failed to get box manifest', 'error')
+      }
+    } catch (err) {
+      setDocumentError(err instanceof Error ? err.message : 'Failed to get box manifest')
+      showToast('Error', err instanceof Error ? err.message : 'Failed to get box manifest', 'error')
+    } finally {
+      setIsProcessingBoxManifest(false)
+    }
+  }
+
   return (
     <>
       <Header>
@@ -278,6 +330,13 @@ export default function Dashboard() {
                       disabled={isProcessingDocuments || !selectedShipmentId || !csrfToken || !rawCookies}
                     >
                       {isProcessingDocuments ? 'Processing...' : 'Download Documents'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleGetBoxManifest}
+                      disabled={isProcessingBoxManifest || !selectedShipmentId}
+                    >
+                      {isProcessingBoxManifest ? 'Processing...' : 'Get Box Manifest'}
                     </Button>
                   </div>
                 </div>
