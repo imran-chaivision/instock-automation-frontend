@@ -51,6 +51,7 @@ export default function Dashboard() {
   const [agendaId, setAgendaId] = useState<string>('')
   const [shipments, setShipments] = useState<Shipment[]>([])
   const [selectedShipmentId, setSelectedShipmentId] = useState<string>('')
+  const [selectedBrand, setSelectedBrand] = useState<string>('')
   const [csrfToken, setCsrfToken] = useState<string>('')
   const [rawCookies, setRawCookies] = useState<string>('')
   const [isFetchingShipments, setIsFetchingShipments] = useState(false)
@@ -100,7 +101,7 @@ export default function Dashboard() {
   }
 
   const handleCreateShipmentDocuments = async () => {
-    if (!agendaId || !selectedShipmentId || !csrfToken || !rawCookies) {
+    if (!agendaId || !selectedShipmentId || !selectedBrand || !csrfToken || !rawCookies) {
       setError('Please fill in all required fields')
       return
     }
@@ -110,7 +111,7 @@ export default function Dashboard() {
 
     try {
       const response = await apiFetch(
-        `/shipments/shipment-documents?agenda_id=${agendaId}&shipment_id=${selectedShipmentId}&csrftoken=${csrfToken}&raw_cookies=${encodeURIComponent(rawCookies)}`,
+        `/shipments/shipment-documents?agenda_id=${agendaId}&shipment_id=${selectedShipmentId}&brand=${selectedBrand}&csrftoken=${csrfToken}&raw_cookies=${encodeURIComponent(rawCookies)}`,
         {
           method: 'POST',
           signal: abortControllerRef.current?.signal
@@ -150,6 +151,22 @@ export default function Dashboard() {
                 setLogs(logs)
               } catch (error) {
                 console.error('Error parsing logs:', error)
+              }
+            }
+
+            // Get error list from the custom header
+            const errorListHeader = statusResponse.headers.get('X-Error-List')
+            if (errorListHeader) {
+              try {
+                const errorList = JSON.parse(errorListHeader)
+                if (errorList.length > 0) {
+                  setDocumentError(errorList.join('; '))
+                  showToast('Error', errorList.join('; '), 'error')
+                  setIsProcessingDocuments(false)
+                  return
+                }
+              } catch (error) {
+                console.error('Error parsing error list:', error)
               }
             }
 
@@ -310,6 +327,19 @@ export default function Dashboard() {
                     </select>
                   </div>
                   <div className="flex items-center gap-4">
+                    <select
+                      value={selectedBrand}
+                      onChange={(e) => setSelectedBrand(e.target.value)}
+                      className="px-3 py-2 border rounded-md"
+                    >
+                      <option value="">Select a Brand</option>
+                      <option value="LifePro">LifePro</option>
+                      <option value="Joyberri">Joyberri</option>
+                      <option value="PetCove">PetCove</option>
+                      <option value="Loft&Ivy">Loft&Ivy</option>
+                      <option value="Oaktiv">Oaktiv</option>
+                      <option value="Culvani">Culvani</option>
+                    </select>
                     <input
                       type="text"
                       placeholder="Enter CSRF Token"
@@ -327,9 +357,9 @@ export default function Dashboard() {
                     <Button
                       variant="outline"
                       onClick={handleCreateShipmentDocuments}
-                      disabled={isProcessingDocuments || !selectedShipmentId || !csrfToken || !rawCookies}
+                      disabled={isProcessingDocuments || !selectedShipmentId || !selectedBrand || !csrfToken || !rawCookies}
                     >
-                      {isProcessingDocuments ? 'Processing...' : 'Download Documents'}
+                      {isProcessingDocuments ? 'Processing...' : 'Send order to Veyer'}
                     </Button>
                     <Button
                       variant="outline"
