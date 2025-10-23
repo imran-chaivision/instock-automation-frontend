@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 const TOKEN_EXPIRY = 30 * 60 * 1000 // 30 minutes in milliseconds
 const TOKEN_REFRESH_INTERVAL = 25 * 60 * 1000 // 25 minutes in milliseconds
-const API_BASE_URL = "http://localhost:8000/api/v1"
+const API_BASE_URL = "https://instock-automation-backend-2-94581437211.us-central1.run.app/api/v1"
 
 interface AuthState {
     accessToken: string | null

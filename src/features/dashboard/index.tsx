@@ -7,7 +7,7 @@ import { useToast } from '@/components/ui/toast'
 import { apiFetch } from '@/lib/api'
 import { useEffect, useRef, useState } from 'react'
 
-const API_BASE_URL = "http://localhost:8000/api/v1"
+const API_BASE_URL = "https://instock-automation-backend-2-94581437211.us-central1.run.app/api/v1"
 
 interface AbortControllerWithInterval extends AbortController {
   interval?: NodeJS.Timeout;
