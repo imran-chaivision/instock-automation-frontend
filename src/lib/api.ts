@@ -1,4 +1,4 @@
-const API_BASE_URL = "https://instock-automation-backend-2-94581437211.us-central1.run.app/api/v1"
+const API_BASE_URL = "http://localhost:8000/api/v1"
 const AUTH_STORAGE_KEY = "access_token"
 
 export interface ApiOptions extends RequestInit {
