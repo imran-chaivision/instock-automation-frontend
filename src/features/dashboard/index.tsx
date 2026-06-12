@@ -109,8 +109,10 @@ export default function Dashboard() {
     setDocumentError(null)
 
     try {
+      const scUsername = localStorage.getItem('username') ?? ''
+      const scPassword = localStorage.getItem('password') ?? ''
       const response = await apiFetch(
-        `/shipments/shipment-documents?agenda_id=${agendaId}&shipment_id=${selectedShipmentId}&csrftoken=${csrfToken}&raw_cookies=${encodeURIComponent(rawCookies)}`,
+        `/shipments/shipment-documents?agenda_id=${agendaId}&shipment_id=${selectedShipmentId}&csrftoken=${csrfToken}&raw_cookies=${encodeURIComponent(rawCookies)}&sc_username=${encodeURIComponent(scUsername)}&sc_password=${encodeURIComponent(scPassword)}`,
         {
           method: 'POST',
           signal: abortControllerRef.current?.signal
@@ -348,10 +350,21 @@ export default function Dashboard() {
                 </div>
               )}
               {logs.length > 0 && (
-                <div className="text-sm text-red-500">
-                  {logs.map((log, index) => (
-                    <div key={index}>{log}</div>
-                  ))}
+                <div className="text-sm space-y-0.5">
+                  {logs.map((log, index) => {
+                    const isSuccess = log.includes('printed successfully')
+                    const isMissing = log.includes('missing')
+                    const color = isSuccess
+                      ? 'text-green-600'
+                      : isMissing
+                      ? 'text-red-500'
+                      : 'text-gray-600'
+                    return (
+                      <div key={index} className={color}>
+                        {log}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
               {driveLink && (
