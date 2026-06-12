@@ -13,7 +13,7 @@ concurrency:
 env:
   PROJECT_ID: seller-dropship-backend
   REGION: us-central1
-  SERVICE_NAME: instock-automation-backend
+  SERVICE_NAME: instock-automation-frontend
   IMAGE: gcr.io/seller-dropship-backend/instock-automation-frontend
 
 jobs:
