@@ -1,4 +1,4 @@
-name: Deploy Frontend to Cloud Run
+name: Deploy to Cloud Run
 
 on:
   push:
@@ -6,11 +6,15 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   PROJECT_ID: seller-dropship-backend
   REGION: us-central1
-  SERVICE_NAME: seller-dropship-frontend
-  IMAGE: us-central1-docker.pkg.dev/seller-dropship-backend/seller-dropship-frontend/react-app:latest
+  SERVICE_NAME: instock-automation-backend
+  IMAGE: gcr.io/seller-dropship-backend/instock-automation-frontend
 
 jobs:
   deploy:
@@ -23,35 +27,33 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Debug Repository Name
-        run: |
-          echo "Repository: ${{ github.repository }}"
-          echo "Repository Owner: ${{ github.repository_owner }}"
-          echo "Repository Name: ${{ github.event.repository.name }}"
-
       - name: Google Auth
         id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_SA_EMAIL }}
+          workload_identity_provider: projects/94581437211/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-actions@seller-dropship-backend.iam.gserviceaccount.com
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker
-        run: gcloud auth configure-docker
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker --quiet
 
       - name: Build and Push Container
         run: |
-          docker build --platform linux/amd64 -t ${{ env.IMAGE }} .
-          docker push ${{ env.IMAGE }}
+          docker build --platform linux/amd64 \
+            -t ${{ env.IMAGE }}:${{ github.sha }} \
+            -t ${{ env.IMAGE }}:latest \
+            .
+          docker push ${{ env.IMAGE }}:${{ github.sha }}
+          docker push ${{ env.IMAGE }}:latest
 
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image ${{ env.IMAGE }} \
+            --image ${{ env.IMAGE }}:${{ github.sha }} \
             --platform managed \
             --region ${{ env.REGION }} \
             --project ${{ env.PROJECT_ID }} \
-            --allow-unauthenticated
+            --quiet
