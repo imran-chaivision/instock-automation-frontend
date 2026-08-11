@@ -1,5 +1,6 @@
 import { Toaster } from '@/components/ui/toaster'
 import { useAuth } from '@/lib/auth'
+import { SearchProvider } from '@/context/search-context'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { createRootRoute, Outlet, useNavigate } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/router-devtools'
@@ -20,7 +21,7 @@ function RootComponent() {
   }, [navigate, isAuthenticated])
 
   return (
-    <>
+    <SearchProvider>
       <Outlet />
       <Toaster />
       {import.meta.env.MODE === 'development' && (
@@ -29,6 +30,6 @@ function RootComponent() {
           <TanStackRouterDevtools position='bottom-right' />
         </>
       )}
-    </>
+    </SearchProvider>
   )
 }

@@ -27,6 +27,9 @@ const errors401LazyImport = createFileRoute('/(errors)/401')()
 const AuthenticatedSettingsRouteLazyImport = createFileRoute(
   '/_authenticated/settings',
 )()
+const AuthenticatedVcShipmentsIndexLazyImport = createFileRoute(
+  '/_authenticated/vc-shipments/',
+)()
 const AuthenticatedUsersIndexLazyImport = createFileRoute(
   '/_authenticated/users/',
 )()
@@ -125,6 +128,17 @@ const authSignInRoute = authSignInImport.update({
   path: '/sign-in',
   getParentRoute: () => rootRoute,
 } as any)
+
+const AuthenticatedVcShipmentsIndexLazyRoute =
+  AuthenticatedVcShipmentsIndexLazyImport.update({
+    id: '/vc-shipments/',
+    path: '/vc-shipments/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any).lazy(() =>
+    import('./routes/_authenticated/vc-shipments/index.lazy').then(
+      (d) => d.Route,
+    ),
+  )
 
 const AuthenticatedUsersIndexLazyRoute =
   AuthenticatedUsersIndexLazyImport.update({
@@ -364,6 +378,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedUsersIndexLazyImport
       parentRoute: typeof AuthenticatedRouteImport
     }
+    '/_authenticated/vc-shipments/': {
+      id: '/_authenticated/vc-shipments/'
+      path: '/vc-shipments'
+      fullPath: '/vc-shipments'
+      preLoaderRoute: typeof AuthenticatedVcShipmentsIndexLazyImport
+      parentRoute: typeof AuthenticatedRouteImport
+    }
   }
 }
 
@@ -403,6 +424,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedHelpCenterIndexLazyRoute: typeof AuthenticatedHelpCenterIndexLazyRoute
   AuthenticatedTasksIndexLazyRoute: typeof AuthenticatedTasksIndexLazyRoute
   AuthenticatedUsersIndexLazyRoute: typeof AuthenticatedUsersIndexLazyRoute
+  AuthenticatedVcShipmentsIndexLazyRoute: typeof AuthenticatedVcShipmentsIndexLazyRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -414,6 +436,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedHelpCenterIndexLazyRoute: AuthenticatedHelpCenterIndexLazyRoute,
   AuthenticatedTasksIndexLazyRoute: AuthenticatedTasksIndexLazyRoute,
   AuthenticatedUsersIndexLazyRoute: AuthenticatedUsersIndexLazyRoute,
+  AuthenticatedVcShipmentsIndexLazyRoute:
+    AuthenticatedVcShipmentsIndexLazyRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -439,6 +463,7 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof AuthenticatedSettingsIndexLazyRoute
   '/tasks': typeof AuthenticatedTasksIndexLazyRoute
   '/users': typeof AuthenticatedUsersIndexLazyRoute
+  '/vc-shipments': typeof AuthenticatedVcShipmentsIndexLazyRoute
 }
 
 export interface FileRoutesByTo {
@@ -459,6 +484,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsIndexLazyRoute
   '/tasks': typeof AuthenticatedTasksIndexLazyRoute
   '/users': typeof AuthenticatedUsersIndexLazyRoute
+  '/vc-shipments': typeof AuthenticatedVcShipmentsIndexLazyRoute
 }
 
 export interface FileRoutesById {
@@ -482,6 +508,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexLazyRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexLazyRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexLazyRoute
+  '/_authenticated/vc-shipments/': typeof AuthenticatedVcShipmentsIndexLazyRoute
 }
 
 export interface FileRouteTypes {
@@ -506,6 +533,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/tasks'
     | '/users'
+    | '/vc-shipments'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/sign-in'
@@ -525,6 +553,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/tasks'
     | '/users'
+    | '/vc-shipments'
   id:
     | '__root__'
     | '/_authenticated'
@@ -546,6 +575,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/'
     | '/_authenticated/tasks/'
     | '/_authenticated/users/'
+    | '/_authenticated/vc-shipments/'
   fileRoutesById: FileRoutesById
 }
 
@@ -597,7 +627,8 @@ export const routeTree = rootRoute
         "/_authenticated/chats/",
         "/_authenticated/help-center/",
         "/_authenticated/tasks/",
-        "/_authenticated/users/"
+        "/_authenticated/users/",
+        "/_authenticated/vc-shipments/"
       ]
     },
     "/(auth)/sign-in": {
@@ -671,6 +702,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/users/": {
       "filePath": "_authenticated/users/index.lazy.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/vc-shipments/": {
+      "filePath": "_authenticated/vc-shipments/index.lazy.tsx",
       "parent": "/_authenticated"
     }
   }
