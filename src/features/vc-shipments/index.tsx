@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
 import { apiFetch } from '@/lib/api'
 
 const UNIS_FACILITIES = [
@@ -41,6 +41,7 @@ interface ShipmentGroup {
   agendaId: string
   shipmentId: number
   facilityId: string
+  selected: boolean
 }
 
 type Step = 1 | 2 | 3 | 4
@@ -79,10 +80,12 @@ export default function VcShipments() {
         const data = await apiFetch(`/shipments/agenda-shipments?agenda_id=${encodeURIComponent(agendaId)}`)
         for (const shipment of data.Data.Results) {
           const key = shipmentKey(agendaId, shipment.ID)
+          const facilityId = SC_WAREHOUSE_TO_UNIS_FACILITY[shipment.ShipFromWarehouseID] ?? ''
           nextShipments[key] = {
             agendaId,
             shipmentId: shipment.ID,
-            facilityId: SC_WAREHOUSE_TO_UNIS_FACILITY[shipment.ShipFromWarehouseID] ?? '',
+            facilityId,
+            selected: !!facilityId,
           }
           for (const item of shipment.Items) {
             allLines.push({
@@ -106,13 +109,13 @@ export default function VcShipments() {
     }
   }
 
-  // ---- Step 3: per-shipment facility pick ----
-  function setShipmentFacility(key: string, facilityId: string) {
-    setShipments((prev) => ({ ...prev, [key]: { ...prev[key], facilityId } }))
+  // ---- Step 3: toggle whether a UNIS-eligible shipment is included in this send ----
+  function toggleShipmentSelected(key: string) {
+    setShipments((prev) => ({ ...prev, [key]: { ...prev[key], selected: !prev[key].selected } }))
   }
 
-  // ---- Step 4: send every shipment that has a facility set. UNIS's own inventory
-  // is checked server-side at order-creation time — if it doesn't have enough
+  // ---- Step 4: send every selected shipment that has a UNIS facility set. UNIS's own
+  // inventory is checked server-side at order-creation time — if it doesn't have enough
   // stock, create_order rejects that line and the error shows up in the result. ----
   async function handleSend() {
     setError(null)
@@ -120,7 +123,7 @@ export default function VcShipments() {
     try {
       const results = []
       for (const [key, s] of Object.entries(shipments)) {
-        if (!s.facilityId) continue
+        if (!s.facilityId || !s.selected) continue
         const data = await apiFetch(
           `/shipments/unis-shipment?agenda_id=${encodeURIComponent(s.agendaId)}&shipment_id=${s.shipmentId}&unis_facility_id=${s.facilityId}`,
           { method: 'POST' }
@@ -146,11 +149,16 @@ export default function VcShipments() {
   }
 
   const shipmentList = Object.entries(shipments)
-  const readyToSendCount = shipmentList.filter(([, s]) => s.facilityId).length
+  const unisShipments = shipmentList.filter(([, s]) => s.facilityId)
+  const nonUnisShipments = shipmentList.filter(([, s]) => !s.facilityId)
+  const readyToSendCount = unisShipments.filter(([, s]) => s.selected).length
   // UNIS gets every line in a shipment, so "total units" is just every planned
-  // unit across shipments that are actually going out (i.e. have a facility).
+  // unit across shipments that are actually going out (i.e. selected and UNIS-eligible).
   const totalSelectedUnits = reviewLines
-    .filter((l) => shipments[shipmentKey(l.agendaId, l.shipmentId)]?.facilityId)
+    .filter((l) => {
+      const s = shipments[shipmentKey(l.agendaId, l.shipmentId)]
+      return s?.facilityId && s.selected
+    })
     .reduce((sum, l) => sum + l.plannedQty, 0)
 
   return (
@@ -247,37 +255,58 @@ export default function VcShipments() {
 
         {step === 3 && (
           <div className='space-y-4'>
-            {shipmentList.map(([key, s]) => (
+            {unisShipments.map(([key, s]) => (
               <Card key={key}>
                 <CardHeader>
-                  <CardTitle>
-                    Agenda {s.agendaId} — Shipment {s.shipmentId}
-                  </CardTitle>
-                  <CardDescription>
-                    UNIS facility is auto-filled from the shipment's own warehouse when it's already UNIS-assigned —
-                    otherwise pick one manually. UNIS's own inventory is checked at creation time; the order won't be
-                    created if there isn't enough stock there.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className='space-y-4'>
-                  <div className='flex items-center gap-3'>
-                    <span className='text-sm font-medium'>UNIS Facility</span>
-                    <Select value={s.facilityId} onValueChange={(v) => setShipmentFacility(key, v)}>
-                      <SelectTrigger className='w-64'>
-                        <SelectValue placeholder='Select facility' />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {UNIS_FACILITIES.map((f) => (
-                          <SelectItem key={f.id} value={f.id}>
-                            {f.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className='flex items-start gap-3'>
+                    <Checkbox
+                      className='mt-1'
+                      checked={s.selected}
+                      onCheckedChange={() => toggleShipmentSelected(key)}
+                    />
+                    <div>
+                      <CardTitle>
+                        Agenda {s.agendaId} — Shipment {s.shipmentId}
+                      </CardTitle>
+                      <CardDescription>
+                        UNIS facility: {UNIS_FACILITIES.find((f) => f.id === s.facilityId)?.name}. Auto-filled from
+                        the shipment's own warehouse. UNIS's own inventory is checked at creation time; the order
+                        won't be created if there isn't enough stock there.
+                      </CardDescription>
+                    </div>
                   </div>
-                </CardContent>
+                </CardHeader>
               </Card>
             ))}
+
+            {nonUnisShipments.length > 0 && (
+              <Card className='border-dashed'>
+                <CardHeader>
+                  <CardTitle className='text-muted-foreground'>Not UNIS-managed — excluded</CardTitle>
+                  <CardDescription>
+                    These shipments ship from a warehouse that isn't a UNIS facility, so they can't be released here.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Agenda ID</TableHead>
+                        <TableHead>Shipment ID</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {nonUnisShipments.map(([key, s]) => (
+                        <TableRow key={key}>
+                          <TableCell>{s.agendaId}</TableCell>
+                          <TableCell>{s.shipmentId}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
 
             <div className='flex gap-2'>
               <Button variant='outline' onClick={() => setStep(2)}>
