@@ -17,15 +17,27 @@ const UNIS_FACILITIES = [
   { id: '889', name: 'Buena Park, CA' },
 ]
 
+const GOBOLT_FACILITIES = [
+  { id: 'yyz5', name: 'Markham, ON (YYZ5)' },
+  { id: 'yvr2', name: 'Vancouver, BC (YVR2)' },
+]
+
 // SC warehouse ID -> UNIS facility ID (mirrors nexushub's
 // SELLER_CLOUD_X_UNIS_FACILITY_MAPPING). A shipment's own ShipFromWarehouseID
 // already tells us the facility when it's one of these — no need to ask.
-// Anything else (a Fellowship warehouse) still needs a manual pick, since
-// Fellowship-vs-UNIS routing isn't decided yet.
 const SC_WAREHOUSE_TO_UNIS_FACILITY: Record<number, string> = {
   178: '889', 181: '889', // UNIS CA (standard, LTL)
   180: '825', 183: '825', // UNIS PA (standard, LTL)
   179: '869', 182: '869', // UNIS TX (standard, LTL)
+}
+
+// SC warehouse ID -> GoBolt facility (mirrors nexushub's
+// SELLER_CLOUD_X_GOBOLT_FACILITY_MAPPING). Anything in neither map (e.g. a
+// Fellowship warehouse) still needs a manual pick, since that routing isn't
+// decided yet.
+const SC_WAREHOUSE_TO_GOBOLT_FACILITY: Record<number, string> = {
+  186: 'yyz5', // GoBolt East
+  185: 'yvr2', // GoBolt West
 }
 
 interface ReviewLine {
@@ -37,11 +49,19 @@ interface ReviewLine {
   plannedQty: number
 }
 
+type Provider = 'unis' | 'gobolt'
+
 interface ShipmentGroup {
   agendaId: string
   shipmentId: number
+  provider: Provider | null
   facilityId: string
   selected: boolean
+}
+
+function facilityName(provider: Provider | null, facilityId: string) {
+  const list = provider === 'gobolt' ? GOBOLT_FACILITIES : UNIS_FACILITIES
+  return list.find((f) => f.id === facilityId)?.name
 }
 
 type Step = 1 | 2 | 3 | 4
@@ -80,10 +100,14 @@ export default function VcShipments() {
         const data = await apiFetch(`/shipments/agenda-shipments?agenda_id=${encodeURIComponent(agendaId)}`)
         for (const shipment of data.Data.Results) {
           const key = shipmentKey(agendaId, shipment.ID)
-          const facilityId = SC_WAREHOUSE_TO_UNIS_FACILITY[shipment.ShipFromWarehouseID] ?? ''
+          const unisFacilityId = SC_WAREHOUSE_TO_UNIS_FACILITY[shipment.ShipFromWarehouseID]
+          const goboltFacilityId = SC_WAREHOUSE_TO_GOBOLT_FACILITY[shipment.ShipFromWarehouseID]
+          const provider: Provider | null = unisFacilityId ? 'unis' : goboltFacilityId ? 'gobolt' : null
+          const facilityId = unisFacilityId ?? goboltFacilityId ?? ''
           nextShipments[key] = {
             agendaId,
             shipmentId: shipment.ID,
+            provider,
             facilityId,
             selected: !!facilityId,
           }
@@ -114,26 +138,35 @@ export default function VcShipments() {
     setShipments((prev) => ({ ...prev, [key]: { ...prev[key], selected: !prev[key].selected } }))
   }
 
-  // ---- Step 4: send every selected shipment that has a UNIS facility set. UNIS's own
-  // inventory is checked server-side at order-creation time — if it doesn't have enough
-  // stock, create_order rejects that line and the error shows up in the result. ----
+  // ---- Step 4: send every selected shipment that has a facility set, to whichever
+  // provider it resolved to. Each provider checks its own inventory server-side at
+  // order-creation time — if it doesn't have enough stock, create_order rejects that
+  // line and the error shows up in the result. ----
   async function handleSend() {
     setError(null)
     setLoading(true)
     try {
       const results = []
       for (const [key, s] of Object.entries(shipments)) {
-        if (!s.facilityId || !s.selected) continue
-        const data = await apiFetch(
-          `/shipments/unis-shipment?agenda_id=${encodeURIComponent(s.agendaId)}&shipment_id=${s.shipmentId}&unis_facility_id=${s.facilityId}`,
-          { method: 'POST' }
-        )
-        results.push({ key, agendaId: s.agendaId, shipmentId: s.shipmentId, facilityId: s.facilityId, ...data })
+        if (!s.facilityId || !s.selected || !s.provider) continue
+        const endpoint =
+          s.provider === 'gobolt'
+            ? `/shipments/gobolt-shipment?agenda_id=${encodeURIComponent(s.agendaId)}&shipment_id=${s.shipmentId}&gobolt_facility=${s.facilityId}`
+            : `/shipments/unis-shipment?agenda_id=${encodeURIComponent(s.agendaId)}&shipment_id=${s.shipmentId}&unis_facility_id=${s.facilityId}`
+        const data = await apiFetch(endpoint, { method: 'POST' })
+        results.push({
+          key,
+          agendaId: s.agendaId,
+          shipmentId: s.shipmentId,
+          provider: s.provider,
+          facilityId: s.facilityId,
+          ...data,
+        })
       }
       setSendResults(results)
       setStep(4)
     } catch (e: any) {
-      setError(e.message ?? 'Failed to send to UNIS.')
+      setError(e.message ?? 'Failed to send shipment(s).')
     } finally {
       setLoading(false)
     }
@@ -149,11 +182,12 @@ export default function VcShipments() {
   }
 
   const shipmentList = Object.entries(shipments)
-  const unisShipments = shipmentList.filter(([, s]) => s.facilityId)
-  const nonUnisShipments = shipmentList.filter(([, s]) => !s.facilityId)
-  const readyToSendCount = unisShipments.filter(([, s]) => s.selected).length
-  // UNIS gets every line in a shipment, so "total units" is just every planned
-  // unit across shipments that are actually going out (i.e. selected and UNIS-eligible).
+  const unisShipments = shipmentList.filter(([, s]) => s.provider === 'unis')
+  const goboltShipments = shipmentList.filter(([, s]) => s.provider === 'gobolt')
+  const excludedShipments = shipmentList.filter(([, s]) => !s.provider)
+  const readyToSendCount = shipmentList.filter(([, s]) => s.facilityId && s.selected).length
+  // Each provider gets every line in a shipment, so "total units" is just every planned
+  // unit across shipments that are actually going out (i.e. selected and provider-eligible).
   const totalSelectedUnits = reviewLines
     .filter((l) => {
       const s = shipments[shipmentKey(l.agendaId, l.shipmentId)]
@@ -173,10 +207,11 @@ export default function VcShipments() {
 
       <Main>
         <div className='mb-4'>
-          <h2 className='text-2xl font-bold tracking-tight'>Send to UNIS — Amazon VC / 1P</h2>
+          <h2 className='text-2xl font-bold tracking-tight'>Send to UNIS / GoBolt — Amazon VC / 1P</h2>
           <p className='text-muted-foreground'>
-            Release shipments from Vendor Central agendas into UNIS as 1P orders — one facility per shipment, so the
-            same PO split across multiple shipments/facilities creates one WISE order per facility.
+            Release shipments from Vendor Central agendas into UNIS or GoBolt as 1P orders — one facility per
+            shipment, so the same PO split across multiple shipments/facilities creates one order per facility.
+            Which provider a shipment goes to is decided by its own warehouse, not a manual choice.
           </p>
         </div>
 
@@ -269,9 +304,9 @@ export default function VcShipments() {
                         Agenda {s.agendaId} — Shipment {s.shipmentId}
                       </CardTitle>
                       <CardDescription>
-                        UNIS facility: {UNIS_FACILITIES.find((f) => f.id === s.facilityId)?.name}. Auto-filled from
-                        the shipment's own warehouse. UNIS's own inventory is checked at creation time; the order
-                        won't be created if there isn't enough stock there.
+                        UNIS facility: {facilityName(s.provider, s.facilityId)}. Auto-filled from the shipment's own
+                        warehouse. UNIS's own inventory is checked at creation time; the order won't be created if
+                        there isn't enough stock there.
                       </CardDescription>
                     </div>
                   </div>
@@ -279,12 +314,37 @@ export default function VcShipments() {
               </Card>
             ))}
 
-            {nonUnisShipments.length > 0 && (
+            {goboltShipments.map(([key, s]) => (
+              <Card key={key}>
+                <CardHeader>
+                  <div className='flex items-start gap-3'>
+                    <Checkbox
+                      className='mt-1'
+                      checked={s.selected}
+                      onCheckedChange={() => toggleShipmentSelected(key)}
+                    />
+                    <div>
+                      <CardTitle>
+                        Agenda {s.agendaId} — Shipment {s.shipmentId}
+                      </CardTitle>
+                      <CardDescription>
+                        GoBolt facility: {facilityName(s.provider, s.facilityId)}. Auto-filled from the shipment's own
+                        warehouse. GoBolt's own inventory is checked at creation time; the order won't be created if
+                        there isn't enough stock there. Routed to RetailReady for Amazon processing.
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+              </Card>
+            ))}
+
+            {excludedShipments.length > 0 && (
               <Card className='border-dashed'>
                 <CardHeader>
-                  <CardTitle className='text-muted-foreground'>Not UNIS-managed — excluded</CardTitle>
+                  <CardTitle className='text-muted-foreground'>Not UNIS/GoBolt-managed — excluded</CardTitle>
                   <CardDescription>
-                    These shipments ship from a warehouse that isn't a UNIS facility, so they can't be released here.
+                    These shipments ship from a warehouse that isn't a UNIS or GoBolt facility, so they can't be
+                    released here.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -296,7 +356,7 @@ export default function VcShipments() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {nonUnisShipments.map(([key, s]) => (
+                      {excludedShipments.map(([key, s]) => (
                         <TableRow key={key}>
                           <TableCell>{s.agendaId}</TableCell>
                           <TableCell>{s.shipmentId}</TableCell>
@@ -317,7 +377,7 @@ export default function VcShipments() {
               </Button>
             </div>
             <p className='text-xs text-muted-foreground'>
-              Note: UNIS receives every item in the shipment, not a subset — sending is scoped per shipment.
+              Note: each provider receives every item in the shipment, not a subset — sending is scoped per shipment.
             </p>
           </div>
         )}
@@ -327,8 +387,8 @@ export default function VcShipments() {
             <CardHeader>
               <CardTitle>Step 4 of 4 — Confirm & Send</CardTitle>
               <CardDescription>
-                This finalizes the VC shipment payload(s) sent to UNIS via NexusHub. SellerCloud remains system of
-                record for all EDI back to Vendor Central.
+                This finalizes the VC shipment payload(s) sent to UNIS/GoBolt via NexusHub. SellerCloud remains
+                system of record for all EDI back to Vendor Central.
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-4'>
@@ -346,8 +406,8 @@ export default function VcShipments() {
                 <div className='mt-2 space-y-1 text-sm'>
                   {sendResults.map((r, i) => (
                     <div key={i}>
-                      Agenda {r.agendaId} / Shipment {r.shipmentId} @{' '}
-                      {UNIS_FACILITIES.find((f) => f.id === r.facilityId)?.name}:{' '}
+                      [{r.provider === 'gobolt' ? 'GoBolt' : 'UNIS'}] Agenda {r.agendaId} / Shipment {r.shipmentId} @{' '}
+                      {facilityName(r.provider, r.facilityId)}:{' '}
                       {r.results?.map((res: any, j: number) => (
                         <span key={j}>
                           Order {res.order_id} → {res.error ? `failed: ${res.error}` : `queued (${res.message_id})`}
