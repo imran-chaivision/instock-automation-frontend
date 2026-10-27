@@ -1,14 +1,15 @@
 # Build stage
 FROM node:20-alpine as build
 
-# Install pnpm
-RUN npm install -g pnpm
+# Install pnpm (pinned to avoid CI silently picking up a newer major
+# with breaking install-script/config behavior, as happened going from 10.x)
+RUN npm install -g pnpm@10.22.0
 
 # Set working directory
 WORKDIR /app
 
 # Copy package files
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
